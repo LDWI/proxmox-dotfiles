@@ -2,8 +2,9 @@
 set -euo pipefail
 
 # ==============================================================================
-# Script Name: create-debian13-vm.sh
+# Script Name: create_GP_debian_vm.sh
 # Purpose: Set up a Proxmox VM based on the Debian 13 (Trixie) Cloud Image interactively.
+#          with support for a premade custom Cloud-Init configuration file.
 # ==============================================================================
 
 # Ensure the script is run as root
@@ -15,7 +16,7 @@ fi
 CLOUD_IMAGE_URL="https://cloud.debian.org/images/cloud/trixie/latest/debian-13-generic-amd64.qcow2"
 IMAGE_FILE="debian-13-generic-amd64.qcow2"
 
-echo "=== Proxmox Debian 13 (Trixie) VM Setup ==="
+echo "=== Proxmox Debian 13 (Trixie) VM Setup with Cloud-Init Snippet ==="
 
 # Interactive inputs with default values
 read -rp "Enter store for the ISO image [local-lvm]: " IMAGE_STORE
@@ -29,6 +30,25 @@ NAME="${NAME:-debian-trixie}"
 
 read -rp "Enter starting VMID [100]: " VMID
 VMID="${VMID:-100}"
+
+# Prompt for custom Cloud-Init configuration options
+read -rp "Do you want to use a premade custom Cloud-Init config file? (y/N): " USE_CUSTOM_CI
+USE_CUSTOM_CI="${USE_CUSTOM_CI:-N}"
+
+if [[ "$USE_CUSTOM_CI" =~ ^[Yy]$ ]]; then
+  read -rp "Enter the storage pool containing your snippets [local]: " SNIPPET_STORE
+  SNIPPET_STORE="${SNIPPET_STORE:-"local"}"
+
+  echo "cloud-init files under /var/lib/vz/snippets"
+  ls -l /var/lib/vz/snippets | awk '{print $9}' #TODO should have a check if there is no files under the snippets dir
+
+  read -rp "Enter the filename of your user-data snippet (e.g., user-data.yaml): " CI_USER_FILE # TODO some checker to ensure that a valid cloud-init was given should be made
+  if [ -z "$CI_USER_FILE" ]; then
+    echo "Error: Cloud-Init snippet filename cannot be empty if custom CI is enabled." >&2
+    exit 1
+  fi
+fi
+
 
 # 1. Check and download Debian 13 (Trixie) Cloud Image if not already present
 if [ ! -f "$IMAGE_FILE" ]; then
@@ -64,7 +84,8 @@ qm create "$VMID" \
   --net0 virtio,bridge=vmbr0 \
   --scsihw virtio-scsi-pci \
   --serial0 socket \
-  --vga serial0
+  --vga serial0 \
+  --ipconfig0 ip=dhcp,ipv6=dhcp
 
 # 5. Import the cloud image disk into the storage pool
 echo "Importing cloud image into VM $VMID (from '$IMAGE_STORE') ..."
@@ -77,11 +98,20 @@ echo "Attaching imported disk ($IMPORTED_DISK) to scsi0..."
 qm set "$VMID" --scsi0 "$IMPORTED_DISK"
 qm set "$VMID" --boot "order=scsi0"
 
-# 6. Add Cloud-Init drive for configuration (users, SSH keys, passwords)
+# 6. Add Cloud-Init drive and apply custom configuration if requested
 echo "Adding Cloud-Init drive on ide2..."
 qm set "$VMID" --ide2 "${IMAGE_STORE}:cloudinit"
 
+if [[ "$USE_CUSTOM_CI" =~ ^[Yy]$ ]]; then
+  echo "Applying custom Cloud-Init user file (${SNIPPET_STORE}:snippets/${CI_USER_FILE})..."
+  qm set "$VMID" --cicustom "user=${SNIPPET_STORE}:snippets/${CI_USER_FILE}"
+fi
+
 echo "=============================================================================="
 echo "Success! VM $VMID ($NAME) has been created and configured."
-echo "You can now configure Cloud-Init settings in the Proxmox UI or via CLI before booting."
+if [[ "$USE_CUSTOM_CI" =~ ^[Yy]$ ]]; then
+  echo "Custom Cloud-Init snippet '${CI_USER_FILE}' has been successfully attached."
+else
+  echo "You can now configure Cloud-Init settings in the Proxmox UI or via CLI before boot"
+fi
 echo "=============================================================================="
