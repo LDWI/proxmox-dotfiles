@@ -18,8 +18,8 @@ IMAGE_FILE="debian-13-generic-amd64.qcow2"
 echo "=== Proxmox Debian 13 (Trixie) VM Setup ==="
 
 # Interactive inputs with default values
-read -rp "Enter store for the ISO image [local]: " VMID
-IMAGE_STORE="${IMAGE_STORE:-local}"
+read -rp "Enter store for the ISO image [local-lvm]: " IMAGE_STORE
+IMAGE_STORE="${IMAGE_STORE:-"local-lvm"}" # TODO VM will be created and program will terminate midway if store doesn't support VM images. Code against this
 
 read -rp "Enter memory in MB [4096]: " MEMORY
 MEMORY="${MEMORY:-4096}"
@@ -49,7 +49,7 @@ echo "Using available VMID: $VMID"
 ORIGINAL_NAME="$NAME"
 COUNTER=1
 while qm list | awk 'NR>1 {print $2}' | grep -qw "$NAME"; do
-  NAME="${ORIGINAL_NAME}_${COUNTER}"
+  NAME="${ORIGINAL_NAME}-${COUNTER}"
   COUNTER=$((COUNTER + 1))
 done
 if [ "$NAME" != "$ORIGINAL_NAME" ]; then
@@ -67,7 +67,7 @@ qm create "$VMID" \
   --vga serial0
 
 # 5. Import the cloud image disk into the storage pool
-echo "Importing cloud image into VM $VMID (from '$IMAGE_STORE) ..."
+echo "Importing cloud image into VM $VMID (from '$IMAGE_STORE') ..."
 qm importdisk "$VMID" "$IMAGE_FILE" "$IMAGE_STORE"
 
 # Note: qm importdisk typically registers the disk as an unused disk. 
