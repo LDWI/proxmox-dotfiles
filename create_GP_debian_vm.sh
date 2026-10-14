@@ -5,7 +5,7 @@ CLOUD_IMAGE_URL="https://cloud.debian.org/images/cloud/trixie/latest/debian-13-g
 VMID=100
 
 # make all of the following interactive
-# MEMORY={INPUT:-"2048"}
+# MEMORY={INPUT:-"4096"}
 # NAME={INPUT:-"default_00"}
 #
 # # Install and import Debian 13 (Trixie) Cloud Image
@@ -25,4 +25,9 @@ VMID=100
 # --name $(NAME) \
 # --net0 virtio,bridge=vmbr0 \
 # --scsihw virtio-scsi-pci \
-# --scsi0 local:vm-$(VMID)-disk-1
+# --scsi0 local:vm-$(VMID)-disk-1 \
+# --bootdisk scsi0 \
+# --boot c \
+# --ide2 local_lvm:cloud-init \
+# --serial0 socket \
+# --vgc serial0
